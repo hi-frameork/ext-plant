@@ -1,8 +1,8 @@
 /*
   +----------------------------------------------------------------------+
-  | PHP Version 7                                                        |
+  | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2017 The PHP Group                                |
+  | Copyright (c) 1997-2016 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -12,7 +12,7 @@
   | obtain it through the world-wide-web, please send a note to          |
   | license@php.net so we can mail you a copy immediately.               |
   +----------------------------------------------------------------------+
-  | Author:                                                              |
+  | Author: Russell                                                      |
   +----------------------------------------------------------------------+
 */
 
@@ -27,7 +27,6 @@
 #include "ext/standard/info.h"
 #include "php_plant.h"
 #include "SAPI.h"
-
 
 /* cli sapi 模式下不处理 header 透传 */
 #define  CHECK_SAPI_NAME do {                                                                   \
@@ -44,13 +43,14 @@ PHP_FUNCTION(plant_curl_exec);
 PHP_FUNCTION(plant_curl_setopt_array);
 PHP_FUNCTION(plant_curl_reset);
 
-static void (*ori_execute_internal)(zend_execute_data *execute_data, zval *return_value);
-ZEND_API void plant_execute_internal(zend_execute_data *execute_data, zval *return_value);
+static void (*ori_execute_internal)(zend_execute_data *execute_data_ptr, zend_fcall_info *fci, int return_value_used TSRMLS_DC);
+ZEND_API void plant_execute_internal(zend_execute_data *execute_data, zend_fcall_info *fci, int return_value_used TSRMLS_DC);
 
 ZEND_DECLARE_MODULE_GLOBALS(plant)
 
 /* Make sapi_module accessable */
 extern sapi_module_struct sapi_module;
+
 
 /* {{{ plant reload struct */
 typedef struct plant_reload_def_st {
@@ -70,6 +70,7 @@ static const plant_reload_def prd[] = {
 };
 /* }}} */
 
+
 /* {{{ origin_funtion_handler */
 zend_function *origin_curl_setopt       = NULL;
 zend_function *origin_curl_exec         = NULL;
@@ -77,40 +78,35 @@ zend_function *origin_curl_setopt_array = NULL;
 zend_function *origin_curl_reset        = NULL;
 /* }}} */
 
-
 /* {{{ plant reload curl function for performance */
 static void plant_reload_curl_function()
 {
     zend_function *orig, *replace;
     const plant_reload_def *p = &(prd[0]);
     while(p->orig_func != NULL) {
-        if (zend_hash_str_find_ptr(CG(function_table), p->save_func, strlen(p->orig_func)) == NULL) {
-            replace = zend_hash_str_find_ptr(CG(function_table), p->over_func, strlen(p->over_func));
-            if ((orig = zend_hash_str_find_ptr(CG(function_table), p->orig_func, strlen(p->orig_func))) != NULL) {
-                if (orig->type == ZEND_INTERNAL_FUNCTION) {
-                    //Not execute arg_info release
-                     orig->common.fn_flags = ZEND_ACC_PUBLIC;
-                     //Set orig handle
-                    if(!strcmp(p->orig_func,"curl_setopt")) {
-                        origin_curl_setopt =  pemalloc(sizeof(zend_internal_function), HASH_FLAG_PERSISTENT);
-                        memcpy(origin_curl_setopt, orig, sizeof(zend_internal_function));
-                    } else if (!strcmp(p->orig_func,"curl_exec")) {
-                        origin_curl_exec =  pemalloc(sizeof(zend_internal_function), HASH_FLAG_PERSISTENT);
-                        memcpy(origin_curl_exec, orig, sizeof(zend_internal_function));
-                    } else if (!strcmp(p->orig_func,"curl_setopt_array")) {
-                        origin_curl_setopt_array = pemalloc(sizeof(zend_internal_function) , HASH_FLAG_PERSISTENT);
-                        memcpy(origin_curl_setopt_array, orig, sizeof(zend_internal_function));
-                    } else if (!strcmp(p->orig_func,"curl_reset")) {
-                        origin_curl_reset = pemalloc(sizeof(zend_internal_function), HASH_FLAG_PERSISTENT);
-                        memcpy(origin_curl_reset, orig, sizeof(zend_internal_function));
-                    }
-                    function_add_ref(orig);
-                    zend_hash_str_update_mem(CG(function_table), p->orig_func, strlen(p->orig_func), replace, sizeof(zend_internal_function));
-                    function_add_ref(replace);
-                }
+        if (zend_hash_find(CG(function_table), p->save_func, strlen(p->orig_func) + 1, (void **)&orig) != SUCCESS) {
+            zend_hash_find(CG(function_table), p->over_func, strlen(p->over_func) + 1, (void **)&replace);
+            if (zend_hash_find(CG(function_table), p->orig_func, strlen(p->orig_func) + 1, (void **)&orig) == SUCCESS) {
+                zend_hash_add(CG(function_table), p->save_func, strlen(p->save_func)+1, orig, sizeof(zend_function), NULL);
+                zend_hash_update(CG(function_table), p->orig_func, strlen(p->orig_func) + 1, replace, sizeof(zend_function), NULL);
             }
         }
         p++;
+    }
+
+    // /* retrieve function from function table */
+    zend_function *orig_func;
+    if (zend_hash_find(CG(function_table), "origin_plant_curl_setopt", sizeof("origin_plant_curl_setopt"), (void **)&orig_func) == SUCCESS ) {
+        origin_curl_setopt = orig_func;
+    }
+    if (zend_hash_find(CG(function_table), "origin_plant_curl_exec", sizeof("origin_plant_curl_exec"), (void **)&orig_func) == SUCCESS ) {
+        origin_curl_exec = orig_func;
+    }
+    if (zend_hash_find(CG(function_table), "origin_plant_curl_setopt_array", sizeof("origin_plant_curl_setopt_array"), (void **)&orig_func) == SUCCESS ) {
+        origin_curl_setopt_array = orig_func;
+    }
+    if (zend_hash_find(CG(function_table), "origin_plant_curl_reset", sizeof("origin_plant_curl_reset"), (void **)&orig_func) == SUCCESS ) {
+        origin_curl_reset = orig_func;
     }
 }
 /* }}} */
@@ -121,10 +117,9 @@ static void plant_clear_reload_function()
     const plant_reload_def *p = &(prd[0]);
     zend_function *orig;
     while (p->orig_func != NULL) {
-        if ((orig = zend_hash_str_find_ptr(CG(function_table), p->save_func, strlen(p->save_func))) != NULL) {
-              zend_hash_str_update_mem(CG(function_table), p->orig_func, strlen(p->orig_func), orig, sizeof(zend_internal_function));
-              function_add_ref(orig);
-              zend_hash_str_del(CG(function_table), p->save_func, strlen(p->save_func));
+        if (zend_hash_find(CG(function_table), p->save_func, strlen(p->save_func)+1, (void **)&orig) == SUCCESS) {
+              zend_hash_update(CG(function_table), p->orig_func, strlen(p->orig_func)+1, orig, sizeof(zend_function), NULL);
+              zend_hash_del(CG(function_table), p->save_func, strlen(p->save_func)+1); 
          }
         p++;
     }
@@ -141,7 +136,7 @@ zend_bool add_header_route_label(plant_interceptor_t *pit, zval *headers)
         pass_value = emalloc(value_size);
         snprintf(pass_value, value_size, "%s: %s", PLANT_G(route_label_key), PLANT_G(route_label_value).c);
         pass_value[value_size - 1] = '\0';
-        add_next_index_string(headers, pass_value);
+        add_next_index_string(headers, pass_value, 1);
         efree(pass_value);
         return 1;
     }
@@ -150,18 +145,20 @@ zend_bool add_header_route_label(plant_interceptor_t *pit, zval *headers)
 }
 /* }}} */
 
+
 /* {{{ plant_curl_setopt */
 PHP_FUNCTION(plant_curl_setopt)
 {
     /* 前置操作 */
-    zval *zid, *zvalue;
-    zend_long  options;
+    zval *zid, **zvalue;
+    long options;
 
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rlz", &zid, &options, &zvalue) == SUCCESS) {
-        if (options == Z_LVAL(PLANT_G(pit).curl_http_header_const) && PLANT_Z_TYPE_P(zvalue) == IS_ARRAY) {
-            zval copy_header;
-            ZVAL_DUP(&copy_header, zvalue);
-            add_index_zval(PLANT_G(pit).curl_header_record, Z_RES_HANDLE_P(zid), &copy_header);
+    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rlZ",  &zid, &options, &zvalue) == SUCCESS) {
+        if (options == Z_LVAL(PLANT_G(pit).curl_http_header_const) && PLANT_Z_TYPE_PP(zvalue) == IS_ARRAY) {
+            zval *copy_header;
+            ALLOC_INIT_ZVAL(copy_header);
+            ZVAL_ZVAL(copy_header, *zvalue, 1, 0);
+            add_index_zval(PLANT_G(pit).curl_header_record, Z_RESVAL_P(zid), copy_header);
         }
     }
    
@@ -183,9 +180,10 @@ PHP_FUNCTION(plant_curl_setopt_array)
         HashTable *ht = Z_ARRVAL_P(arr);
         zval *http_header = NULL;
         if (plant_zend_hash_index_zval_find(ht, Z_LVAL(PLANT_G(pit).curl_http_header_const), (void **)&http_header) == SUCCESS) {
-            zval copy_header;
-            ZVAL_DUP(&copy_header, http_header);
-            add_index_zval(PLANT_G(pit).curl_header_record, Z_RES_HANDLE_P(zid), &copy_header);
+            zval *copy_header;
+            ALLOC_INIT_ZVAL(copy_header);
+            ZVAL_ZVAL(copy_header, http_header, 1, 0);
+            add_index_zval(PLANT_G(pit).curl_header_record, Z_RESVAL_P(zid), copy_header);
         }
     }
     
@@ -212,7 +210,7 @@ PHP_FUNCTION(plant_curl_exec)
         zval *option = NULL;
         int is_init = 0;
 
-        if (plant_zend_hash_index_zval_find(Z_ARRVAL_P(pit->curl_header_record), Z_RES_HANDLE_P(res), (void **)&tmp) == SUCCESS) {
+        if (plant_zend_hash_index_zval_find(Z_ARRVAL_P(pit->curl_header_record), Z_RESVAL_P(res), (void **)&tmp) == SUCCESS) {
             option = tmp;
         } else {
             ALLOC_INIT_ZVAL(option);
@@ -227,17 +225,17 @@ PHP_FUNCTION(plant_curl_exec)
         zval func;
         zval *argv[3];
         zval ret;
-        ZVAL_STRING(&func, "curl_setopt");
+        ZVAL_STRING(&func, "curl_setopt", 1);
         argv[0] = res;
         argv[1] = &pit->curl_http_header_const;
         argv[2] = option;
-        plant_call_user_function(EG(function_table), (zval **)NULL, &func, &ret, 3, argv);
+        call_user_function(EG(function_table), (zval **)NULL, &func, &ret, 3, argv);
         zval_dtor(&ret);
 
         if (is_init == 1) {
-            zval_ptr_dtor(option);
+            zval_ptr_dtor(&option);
         }
-        zval_ptr_dtor(&func);
+        zval_dtor(&func); 
     }
     
     /* 源方法调用 */
@@ -263,7 +261,8 @@ PHP_FUNCTION(plant_curl_reset)
 }
 /* }}} */
 
-
+/* True global resources - no need for thread safety here */
+// static int le_plant;
 
 /* {{{ PHP_INI
  */
@@ -273,17 +272,19 @@ PHP_INI_BEGIN()
 PHP_INI_END()
 /* }}} */
 
+
 /* {{{ 暴露获取流量标识能力 */
 PHP_FUNCTION(plant_route_label)
 {
     if (PLANT_G(route_label_value).len == 0) {
-        RETURN_STR(strpprintf(0, "No HTTP_XE_TAG Header"));
+        RETURN_STRINGL("No HTTP_XE_TAG Header", strlen("No HTTP_XE_TAG Header"), 0);
         return;
     }
-
-    RETURN_STR(strpprintf(0, "%s", PLANT_G(route_label_value).c));
+    
+    RETURN_STRING(PLANT_G(route_label_value).c, 0)
 }
 /* }}} */
+
 
 /* {{{ php_plant_init_globals
  */
@@ -305,6 +306,7 @@ PHP_MINIT_FUNCTION(plant)
     }
 
     CHECK_SAPI_NAME;
+
     ori_execute_internal = zend_execute_internal;
     zend_execute_internal = plant_execute_internal;
 
@@ -313,9 +315,9 @@ PHP_MINIT_FUNCTION(plant)
 
     plant_interceptor_t *pit = &PLANT_G(pit);
     ZVAL_LONG(&(pit->curl_http_header_const), -1);
-    plant_zend_get_constant("CURLOPT_HTTPHEADER", sizeof("CURLOPT_HTTPHEADER") - 1, &pit->curl_http_header_const);
+    zend_get_constant("CURLOPT_HTTPHEADER", sizeof("CURLOPT_HTTPHEADER") - 1, &pit->curl_http_header_const);
 
-	return SUCCESS;
+    return SUCCESS;
 }
 /* }}} */
 
@@ -348,10 +350,6 @@ PHP_MSHUTDOWN_FUNCTION(plant)
  */
 PHP_RINIT_FUNCTION(plant)
 {
-#if defined(COMPILE_DL_PLANT) && defined(ZTS)
-	ZEND_TSRMLS_CACHE_UPDATE();
-#endif
-
 	if (!PLANT_G(enable)) {
         return SUCCESS;
     }
@@ -377,7 +375,7 @@ PHP_RINIT_FUNCTION(plant)
  */
 PHP_RSHUTDOWN_FUNCTION(plant)
 {
-	if (!PLANT_G(enable)) {
+    if (!PLANT_G(enable)) {
         return SUCCESS;
     }
 
@@ -386,11 +384,10 @@ PHP_RSHUTDOWN_FUNCTION(plant)
     }
 
     /* 清空本次请求流量标识 */
-    smart_string_free(&PLANT_G(route_label_value));
-    /* 清楚本次请求记录的 header */
+    smart_str_free(&PLANT_G(route_label_value));
+
     plant_interceptor_t *pit = &PLANT_G(pit);
-    zval_ptr_dtor(pit->curl_header_record);
-    efree(pit->curl_header_record);
+    zval_ptr_dtor(&pit->curl_header_record);
 
 	return SUCCESS;
 }
@@ -423,6 +420,7 @@ const zend_function_entry plant_functions[] = {
 };
 /* }}} */
 
+
 /* {{{ plant_deps */
 static const zend_module_dep plant_deps[] = {
     ZEND_MOD_REQUIRED("curl")
@@ -449,14 +447,11 @@ zend_module_entry plant_module_entry = {
 /* }}} */
 
 #ifdef COMPILE_DL_PLANT
-#ifdef ZTS
-ZEND_TSRMLS_CACHE_DEFINE()
-#endif
 ZEND_GET_MODULE(plant)
 #endif
 
 
-ZEND_API void plant_execute_core(int internal, zend_execute_data *execute_data, zval *return_value)
+ZEND_API void plant_execute_core(int internal, zend_execute_data *execute_data, zend_fcall_info *fci, int rvu TSRMLS_DC)
 {
     zend_bool dobailout = 0;
 
@@ -466,9 +461,9 @@ ZEND_API void plant_execute_core(int internal, zend_execute_data *execute_data, 
     zend_try {
         if (internal) {
             if (ori_execute_internal) {
-                ori_execute_internal(execute_data, return_value);
+                ori_execute_internal(execute_data, fci, rvu TSRMLS_CC);
             } else {
-                execute_internal(execute_data, return_value);
+                execute_internal(execute_data, fci, rvu TSRMLS_CC);
             }
         }
     } zend_catch {
@@ -482,11 +477,10 @@ ZEND_API void plant_execute_core(int internal, zend_execute_data *execute_data, 
     }
 }
 
-ZEND_API void plant_execute_internal(zend_execute_data *execute_data, zval *return_value)
+ZEND_API void plant_execute_internal(zend_execute_data *execute_data, zend_fcall_info *fci, int return_value_used TSRMLS_DC)
 {
-    plant_execute_core(1, execute_data, return_value);
+    plant_execute_core(1, execute_data, fci, return_value_used TSRMLS_CC);
 }
-
 
 /*
  * Local variables:

@@ -16,6 +16,7 @@ dnl Otherwise use enable:
 PHP_ARG_ENABLE(plant, whether to enable plant support,
 [  --enable-plant           Enable plant support])
 
+
 # PHP enable debug模型下开启扩展debug支持
 if test -z "$PHP_DEBUG"; then
   AC_ARG_ENABLE(debug,
@@ -60,5 +61,5 @@ if test "$PHP_PLANT" != "no"; then
                     On Redhat: sudo yum install libcurl-devel])
   fi
 
-  PHP_NEW_EXTENSION(plant, plant.c, $ext_shared,, -DZEND_ENABLE_STATIC_TSRMLS_CACHE=1)
+  PHP_NEW_EXTENSION(plant, plant.c, $ext_shared)
 fi

@@ -8,6 +8,6 @@
 // ARG_ENABLE("plant", "enable plant support", "no");
 
 if (PHP_PLANT != "no") {
-	EXTENSION("plant", "plant.c", PHP_EXTNAME_SHARED, "/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1");
+	EXTENSION("plant", "plant.c");
 }
 

@@ -1,21 +1,12 @@
 --TEST--
-Check for plant presence
+检查 Plant 扩展是否存在
+
 --SKIPIF--
 <?php if (!extension_loaded("plant")) print "skip"; ?>
+
 --FILE--
 <?php 
 echo "plant extension is available";
-/*
-	you can add regression tests for your extension here
-
-  the output of your test code has to be equal to the
-  text in the --EXPECT-- section below for the tests
-  to pass, differences between the output and the
-  expected text are interpreted as failure
-
-	see php7/README.TESTING for further information on
-  writing regression tests
-*/
 ?>
 --EXPECT--
 plant extension is available

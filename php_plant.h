@@ -1,8 +1,8 @@
 /*
   +----------------------------------------------------------------------+
-  | PHP Version 7                                                        |
+  | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2017 The PHP Group                                |
+  | Copyright (c) 1997-2016 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -12,7 +12,7 @@
   | obtain it through the world-wide-web, please send a note to          |
   | license@php.net so we can mail you a copy immediately.               |
   +----------------------------------------------------------------------+
-  | Author:                                                              |
+  | Author: Russell                                                      |
   +----------------------------------------------------------------------+
 */
 
@@ -38,7 +38,7 @@ extern zend_module_entry plant_module_entry;
 #include "TSRM.h"
 #endif
 
-#include "ext/standard/php_smart_string.h"
+#include "ext/standard/php_smart_str.h"
 #include "plant_util.h"
 
 PHP_MINIT_FUNCTION(plant);
@@ -47,25 +47,32 @@ PHP_RINIT_FUNCTION(plant);
 PHP_RSHUTDOWN_FUNCTION(plant);
 PHP_MINFO_FUNCTION(plant);
 
-
+/* 扩展全局信息 */
 ZEND_BEGIN_MODULE_GLOBALS(plant)
     zend_bool               enable;                    /* 配置(ini): plant.enable */
     char                    *route_label_key;          /* 配置(ini): plant.route_label */
 
     plant_interceptor_t     pit;                       /* 拦截头模块 */
 
-    smart_string            route_label_value;         /* 请求原始流量标识值（来自 route_label_key） */
+    smart_str               route_label_value;         /* 请求原始流量标识值（来自 route_label_key） */
     zend_bool               enable_sapi;               /* enable_sapi */
 ZEND_END_MODULE_GLOBALS(plant)
 
-/* Always refer to the globals in your function as PLANT_G(variable).
-   You are encouraged to rename these macros something shorter, see
+
+/* In every utility function you add that needs to use variables 
+   in php_plant_globals, call TSRMLS_FETCH(); after declaring other 
+   variables used by that function, or better yet, pass in TSRMLS_CC
+   after the last function argument and declare your utility function
+   with TSRMLS_DC after the last declared argument.  Always refer to
+   the globals in your function as PLANT_G(variable).  You are 
+   encouraged to rename these macros something shorter, see
    examples in any other php module directory.
 */
-#define PLANT_G(v) ZEND_MODULE_GLOBALS_ACCESSOR(plant, v)
 
-#if defined(ZTS) && defined(COMPILE_DL_PLANT)
-ZEND_TSRMLS_CACHE_EXTERN()
+#ifdef ZTS
+#define PLANT_G(v) TSRMG(plant_globals_id, zend_plant_globals *, v)
+#else
+#define PLANT_G(v) (plant_globals.v)
 #endif
 
 #endif	/* PHP_PLANT_H */
