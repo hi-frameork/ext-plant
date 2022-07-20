@@ -1,0 +1,20 @@
+{
+    "files.associations": {
+        "*.cjson": "jsonc",
+        "*.wxss": "css",
+        "*.wxs": "javascript",
+        "php_ini.h": "c",
+        "php.h": "c",
+        "php_plant.h": "c",
+        "typeinfo": "c",
+        "zend_extensions.h": "c",
+        "zend.h": "c",
+        "sapi.h": "c",
+        "config.h": "c",
+        "php_smart_str.h": "c",
+        "php_smart_str_public.h": "c",
+        "info.h": "c",
+        "random": "c",
+        "stdint.h": "c"
+    }
+}

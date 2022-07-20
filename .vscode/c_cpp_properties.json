@@ -1,0 +1,21 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/.vscode/php/include",
+                "${workspaceFolder}/.vscode/php/include/php/main",
+                "${workspaceFolder}/.vscode/php/include/php/Zend",
+                "${workspaceFolder}/.vscode/php/include/php",
+                "${workspaceFolder}/.vscode/php/include/php/TSRM"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "gnu17",
+            "cppStandard": "gnu++14",
+            "intelliSenseMode": "gcc-x64"
+        }
+    ],
+    "version": 4
+}

@@ -1,0 +1,42 @@
+{
+  "tasks": [
+    {
+      "type": "shell",
+      "label": "run script",
+      "command": "cd ${workspaceFolder}",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$gcc"
+      ]
+    },
+    {
+      "type": "shell",
+      "label": "debug build",
+      "command": "cd ${workspaceFolder} && ./.vscode/php/bin/phpize --clean && ./.vscode/php/bin/phpize && ./configure --with-php-config=./.vscode/php/bin/php-config --enable-debug && make && make install",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$gcc"
+      ]
+    },
+    {
+      "type": "shell",
+      "label": "run test",
+      "command": "cd ${workspaceFolder} && ./.vscode/php/bin/phpize --clean && ./.vscode/php/bin/phpize && ./configure --with-php-config=./.vscode/php/bin/php-config --enable-debug && make test",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ],
+  "version": "2.0.0"
+}
